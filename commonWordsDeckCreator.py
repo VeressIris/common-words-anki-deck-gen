@@ -5,10 +5,13 @@ from itertools import islice
 import deepl
 import os
 from dotenv import load_dotenv
+import genanki
 
 # init variables
 load_dotenv()
 DEEPL_API_KEY = os.getenv('DEEPL_API_KEY')
+
+num_of_words = 5
 
 language_codes = {
     "albanian": "sq",
@@ -45,7 +48,6 @@ language_codes = {
     "turkish": "tr"
 }
 
-
 language = 'german'
 
 # scraping the page 101languages.net page
@@ -68,14 +70,39 @@ csv_url = raw_excel_url.rsplit('edit')[0] + 'export?format=csv'
 df = pd.read_csv(csv_url)
 list_of_words = df[language.capitalize()].tolist()
 
+# init genanki model
+my_model = genanki.Model(
+  1127776048,
+  'My Model',
+  fields=[
+    {'name': 'Question'},
+    {'name': 'Answer'},
+  ],
+  templates=[
+    {
+      'name': 'Card 1',
+      'qfmt': '{{Question}}',
+      'afmt': '{{FrontSide}}<hr id="answer">{{Answer}}',
+    },
+  ],
+  css='.card { text-align: center; font-size: 24px;}')
+
+# init deck
+deck = genanki.Deck(
+    1643045855,
+    f'{num_of_words} most common {language.capitalize()} words')
+
 # init deepl translator
 translator = deepl.Translator(DEEPL_API_KEY)
 
-# compose anki deck txt file
-num_of_words = 3 # number of most common words wanted
+# create and add notes to deck
+for word in islice(list_of_words, num_of_words):
+    translation = translator.translate_text(word, source_lang=language_codes[language.lower()], target_lang="EN-US")
+    note = genanki.Note(
+        model=my_model,
+        fields=[word, translation.text]
+    )
+    deck.add_note(note)
 
-with open('mostCommonWords.txt', 'w', encoding='utf-8') as file:
-    file.write('#separator:tab\n#html:true\n') # boilerplate Anki text
-    for word in islice(list_of_words, num_of_words):
-        translation_res = translator.translate_text(word, source_lang=language_codes[language.lower()], target_lang='EN-US')
-        file.write(f'"{word}"\t"{translation_res.text}"\n')
+# export deck
+genanki.Package(deck).write_to_file(f'{num_of_words}_most_common_{language.capitalize()}_words.apkg')
